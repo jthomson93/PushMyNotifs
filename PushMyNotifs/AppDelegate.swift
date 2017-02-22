@@ -9,6 +9,9 @@
 import UIKit
 import CoreData
 import Firebase
+import FirebaseInstanceID
+import FirebaseMessaging
+import UserNotifications
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -17,11 +20,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+
+        if #available(iOS 10.0, *) {
+            let authOptions : UNAuthorizationOptions = [.alert, .badge, .sound]
+            UNUserNotificationCenter.current().requestAuthorization(
+                options: authOptions,
+                completionHandler: {_,_ in })
+            
+            // For iOS 10 display notification (sent via APNS)
+            UNUserNotificationCenter.current().delegate = self
+            // For iOS 10 data message (sent via FCM)
+            FIRMessaging.messaging().remoteMessageDelegate = self
+            
+        }
+        
+        application.registerForRemoteNotifications()
         
         FIRApp.configure()
         return true
     }
+    
 
     func applicationWillResignActive(_ application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
@@ -91,6 +109,47 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }
     }
+    
+    func tokenRefreshNotifaction(notification: NSNotification) {
+        let refreshedToken = FIRInstanceID.instanceID().token()!
+        print("InstanceID token: \(refreshedToken)")
+        
+        connectToFCM()
+    }
+    
+    func connectToFCM() {
+        FIRMessaging.messaging().connect { (error) in
+            if (error != nil) {
+                print("Unable to connect \(error)")
+            } else {
+                print("Connected to FCM")
+            }
+        }
+    }
 
+}
+
+@available(iOS 10, *)
+extension AppDelegate : UNUserNotificationCenterDelegate {
+    
+    // Receive displayed notifications for iOS 10 devices.
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        // Print message ID.
+        print("Message ID: \(userInfo["gcm.message_id"]!)")
+        
+        // Print full message.
+        print("%@", userInfo)
+        
+    }
+    
+}
+
+extension AppDelegate : FIRMessagingDelegate {
+    // Receive data message on iOS 10 devices.
+    func applicationReceivedRemoteMessage(_ remoteMessage: FIRMessagingRemoteMessage) {
+        print("%@", remoteMessage.appData)
+    }
 }
 
